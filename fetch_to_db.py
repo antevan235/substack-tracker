@@ -65,7 +65,11 @@ def fetch_feed(url):
     for entry in entries:
         title = entry.get("title", "").strip()
         link = entry.get("link", "").strip()
-        author = entry.get("author", "Unknown")
+        author = (entry.get("author") or
+                  (entry.get("dc_creator") 
+                   if "dc_creator" 
+                   in entry else None) or "Unknown")
+
         published = parse_date(entry)
         summary = entry.get("summary", "").strip()
 
