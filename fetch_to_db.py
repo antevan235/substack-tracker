@@ -1,152 +1,102 @@
-import feedparser
 import sqlite3
-import os
+import time
 from datetime import datetime, timezone
+import feedparser
 
-NEWS_FILE = "newsletters.txt"
 DB_FILE = "substack.db"
+FEED_LIST = "newsletters.txt"
 
-# -----------------------------
-# 1. Helper functions
-# -----------------------------
-
-def parse_date(entry):
-    """
-    Convert feed entry date to ISO format.
-    
-    Args:
-        entry (dict): A single feed entry.
-    
-    Returns:
-        str: ISO formatted date or empty string.
-    """
-    try:
-        if entry.get("published_parsed"):
-            return datetime(*entry.published_parsed[:6], tzinfo=timezone.utc).isoformat()
-        return entry.get("published", "") or entry.get("updated", "")
-    except Exception as e:
-        print(f"Error parsing date: {e}")
-        return ""
-
-def fetch_rss(newsletter_url):
-    """
-    Fetch posts from a Substack RSS feed.
-    
-    Args:
-        newsletter_url (str): Base URL of the newsletter.
-    
-    Returns:
-        list of dict: List of posts with keys: newsletter, title, url, author, published, summary.
-    """
-    rss_url = newsletter_url.rstrip("/") + "/feed"
-    print(f"Fetching RSS feed: {rss_url}")
-    
-    try:
-        feed = feedparser.parse(rss_url)
-        if not feed.entries:
-            print(f"No entries found for {newsletter_url}")
-            return []
-
-        newsletter_name = feed.feed.get("title", newsletter_url)
-        posts = []
-        for entry in feed.entries:
-            post = {
-                "newsletter": newsletter_name,
-                "title": entry.get("title", "").strip(),
-                "url": entry.get("link", "").strip(),
-                "author": entry.get("author", "Unknown"),
-                "published": parse_date(entry),
-                "summary": entry.get("summary", "").strip()
-            }
-            if post["title"] and post["url"]:
-                posts.append(post)
-        return posts
-    except Exception as e:
-        print(f"Failed to fetch {newsletter_url}: {e}")
-        return []
-
-def read_newsletters():
-    """
-    Read newsletter URLs from newsletters.txt
-    
-    Returns:
-        list of str: URLs
-    """
-    if not os.path.exists(NEWS_FILE):
-        print(f"{NEWS_FILE} not found. Please create it with newsletter URLs.")
-        return []
-    with open(NEWS_FILE, "r", encoding="utf-8") as f:
-        return [line.strip() for line in f if line.strip()]
-
-# -----------------------------
-# 2. Database functions
-# -----------------------------
-
+# --- Make sure table exists first ---
 def init_db():
-    """Initialize SQLite database with posts table if it doesn't exist."""
     conn = sqlite3.connect(DB_FILE)
-    cursor = conn.cursor()
-    cursor.execute("""
-    CREATE TABLE IF NOT EXISTS posts (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        newsletter TEXT,
-        title TEXT,
-        url TEXT,
-        author TEXT,
-        published TEXT,
-        summary TEXT,
-        fetched_at TEXT
-    )
+    c = conn.cursor()
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS posts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            newsletter TEXT,
+            title TEXT,
+            url TEXT UNIQUE,
+            author TEXT,
+            published TEXT,
+            summary TEXT,
+            tags TEXT,
+            word_count INTEGER,
+            image_url TEXT,
+            fetched_at TEXT
+        )
     """)
     conn.commit()
     conn.close()
 
-def insert_posts(posts):
-    """
-    Insert multiple posts into the database.
-    
-    Args:
-        posts (list of dict): Posts to insert
-    """
-    if not posts:
-        return
+init_db()  # run immediately so table exists
+
+# --- Add posts ---
+def add_post(newsletter, title, url, author, published, summary="", tags="", word_count=0, image_url=""):
     conn = sqlite3.connect(DB_FILE)
-    cursor = conn.cursor()
-    for post in posts:
-        cursor.execute("""
-            INSERT INTO posts (newsletter, title, url, author, published, summary, fetched_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+    c = conn.cursor()
+    try:
+        c.execute("""
+            INSERT INTO posts (newsletter, title, url, author, published, summary, tags, word_count, image_url, fetched_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
-            post["newsletter"],
-            post["title"],
-            post["url"],
-            post["author"],
-            post["published"],
-            post["summary"],
+            newsletter, title, url, author, published, summary, tags, word_count, image_url,
             datetime.now(timezone.utc).isoformat()
         ))
+    except sqlite3.IntegrityError:
+        pass  # Skip duplicates
     conn.commit()
     conn.close()
 
-# -----------------------------
-# 3. Main script
-# -----------------------------
+# --- Parse dates ---
+def parse_date(entry):
+    if entry.get("published_parsed"):
+        return time.strftime("%Y-%m-%d %H:%M:%S", entry.published_parsed)
+    return entry.get("published", "") or entry.get("updated", "")
 
-def fetch_all_newsletters():
-    """Fetch posts from all newsletters in newsletters.txt and insert into DB."""
-    urls = read_newsletters()
-    if not urls:
-        return
+# --- Fetch RSS feeds ---
+def fetch_feed(url):
+    rss_url = url.rstrip("/") + "/feed"
+    print(f"Fetching: {rss_url}")
+    feed = feedparser.parse(rss_url)
 
-    init_db()
-    all_posts = []
+    newsletter = feed.feed.get("title", url)
+    entries = feed.entries or []
+
+    for entry in entries:
+        title = entry.get("title", "").strip()
+        link = entry.get("link", "").strip()
+
+        # --- Author detection ---
+        author = entry.get("author")
+        if not author:
+            author = feed.feed.get("author")  # fallback to feed author
+        if not author:
+            author = newsletter  # fallback to newsletter name
+
+        published = parse_date(entry)
+        summary = entry.get("summary", "").strip()
+
+        # --- Tags ---
+        tags_list = [tag['term'] for tag in entry.get('tags', [])]
+        tags = ", ".join(tags_list)
+
+        # --- Word count ---
+        word_count = len(summary.split())
+
+        # --- Image URL ---
+        image_url = entry.get("media_content", [{}])[0].get("url", "")
+
+        if title and link:
+            add_post(newsletter, title, link, author, published, summary, tags, word_count, image_url)
+
+    print(f"Stored {len(entries)} posts from {newsletter}")
+
+# --- Fetch all feeds from list ---
+def fetch_all():
+    with open(FEED_LIST, "r", encoding="utf-8") as f:
+        urls = [line.strip() for line in f if line.strip()]
     for url in urls:
-        posts = fetch_rss(url)
-        print(f"Fetched {len(posts)} posts from {url}")
-        insert_posts(posts)
-        all_posts.extend(posts)
-    print(f"Total posts fetched: {len(all_posts)}")
-    return all_posts
+        fetch_feed(url)
 
 if __name__ == "__main__":
-    fetch_all_newsletters()
+    fetch_all()
