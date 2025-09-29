@@ -4,6 +4,7 @@ import feedparser
 from dateutil import parser as date_parser
 import time
 import difflib
+import os
 
 DB_FILE = "substack.db"
 FEED_LIST = "newsletters.txt"
@@ -30,22 +31,29 @@ def init_db():
     conn.commit()
     conn.close()
 
-# --- Add post to DB ---
-def add_post(newsletter, title, url, author, published, summary="", tags="", word_count=0, image_url=""):
+# --- Add multiple posts to DB at once ---
+def add_posts(posts):
+    if not posts:
+        return 0
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
-    try:
-        c.execute("""
-            INSERT INTO posts (newsletter, title, url, author, published, summary, tags, word_count, image_url, fetched_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (
-            newsletter, title, url, author, published, summary, tags, word_count, image_url,
-            datetime.now(timezone.utc).isoformat()
-        ))
-    except sqlite3.IntegrityError:
-        pass  # Skip duplicates by URL
+    inserted = 0
+    for post in posts:
+        try:
+            c.execute("""
+                INSERT INTO posts (newsletter, title, url, author, published, summary, tags, word_count, image_url, fetched_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                post["newsletter"], post["title"], post["url"], post["author"], post["published"],
+                post["summary"], post["tags"], post["word_count"], post["image_url"],
+                datetime.now(timezone.utc).isoformat()
+            ))
+            inserted += 1
+        except sqlite3.IntegrityError:
+            pass  # Skip duplicates by URL
     conn.commit()
     conn.close()
+    return inserted
 
 # --- Check for near-duplicate titles ---
 def is_similar_title(title, newsletter):
@@ -56,8 +64,7 @@ def is_similar_title(title, newsletter):
     conn.close()
 
     for existing in existing_titles:
-        similarity = difflib.SequenceMatcher(None, title, existing).ratio()
-        if similarity > 0.9:  # >90% similar
+        if difflib.SequenceMatcher(None, title, existing).ratio() > 0.9:
             return True
     return False
 
@@ -76,48 +83,72 @@ def parse_date(entry):
             dt = date_parser.parse(date_str)
             return dt.strftime("%Y-%m-%d %H:%M:%S")
         except Exception:
-            return date_str  # fallback if parsing fails
+            return date_str
     return ""
 
 # --- Fetch a single RSS feed ---
 def fetch_feed(url):
-    rss_url = url.rstrip("/") + "/feed"
-    print(f"Fetching: {rss_url}")
+    # Handle feed URL correctly
+    if not url.endswith((".rss", "/feed")):
+        rss_url = url.rstrip("/") + "/feed?limit=60"  # fetch up to 60 posts for Substack
+    else:
+        rss_url = url
+
+    print(f"\nFetching: {rss_url}")
     feed = feedparser.parse(rss_url)
+
+    if feed.bozo:
+        print(f"Error parsing feed {rss_url}: {feed.bozo_exception}")
+        return
 
     newsletter = feed.feed.get("title", url)
     entries = feed.entries or []
+    posts_to_add = []
 
     for entry in entries:
         title = entry.get("title", "").strip()
         link = entry.get("link", "").strip()
-
-        # --- Author detection ---
         author = entry.get("author") or feed.feed.get("author") or newsletter
-
         published = parse_date(entry)
         summary = entry.get("summary", "").strip()
-
         tags_list = [tag['term'] for tag in entry.get('tags', [])]
         tags = ", ".join(tags_list)
-
         word_count = len(summary.split())
         image_url = entry.get("media_content", [{}])[0].get("url", "")
 
-        # Only add if not duplicate by URL or near-duplicate by title
+        # Skip if duplicate URL or near-duplicate title
         if title and link and not is_similar_title(title, newsletter):
-            add_post(newsletter, title, link, author, published, summary, tags, word_count, image_url)
+            posts_to_add.append({
+                "newsletter": newsletter,
+                "title": title,
+                "url": link,
+                "author": author,
+                "published": published,
+                "summary": summary,
+                "tags": tags,
+                "word_count": word_count,
+                "image_url": image_url
+            })
 
-    print(f"Stored {len(entries)} posts from {newsletter}")
+    inserted_count = add_posts(posts_to_add)
+    print(f"Inserted {inserted_count}/{len(entries)} posts from {newsletter}")
 
 # --- Fetch all feeds from the list ---
 def fetch_all():
+    if not os.path.exists(FEED_LIST):
+        print(f"{FEED_LIST} not found. Please create it with one feed URL per line.")
+        return
+
     with open(FEED_LIST, "r", encoding="utf-8") as f:
         urls = [line.strip() for line in f if line.strip()]
+
     for url in urls:
-        fetch_feed(url)
+        try:
+            fetch_feed(url)
+        except Exception as e:
+            print(f"Error fetching {url}: {e}")
 
 # --- Main execution ---
 if __name__ == "__main__":
-    init_db()   # ensure table exists
+    init_db()
     fetch_all()

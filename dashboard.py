@@ -103,12 +103,9 @@ st.markdown("---")
 
 # ---------- FILTERING ----------
 filtered = df.copy()
-# convert sidebar dates to UTC-aware datetimes
-start_dt = pd.to_datetime(start_date).tz_localize("UTC")
-end_dt = (pd.to_datetime(end_date) + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)).tz_localize("UTC")
-
+start_dt = pd.to_datetime(start_date)
+end_dt = pd.to_datetime(end_date) + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
 filtered = filtered[(filtered["published_dt"] >= start_dt) & (filtered["published_dt"] <= end_dt)]
-
 
 if selected_newsletters:
     filtered = filtered[filtered["newsletter"].isin(selected_newsletters)]

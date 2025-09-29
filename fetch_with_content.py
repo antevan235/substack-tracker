@@ -7,18 +7,25 @@ CSV_FILE = "substack_posts.csv"
 NEWS_FILE = "newsletters.txt"
 
 def parse_date(entry):
+    """Parse published or updated date into ISO format."""
     if entry.get("published_parsed"):
         return datetime(*entry.published_parsed[:6], tzinfo=timezone.utc).isoformat()
     return entry.get("published", "") or entry.get("updated", "")
 
 def fetch_rss(newsletter_url):
-    rss_url = newsletter_url.rstrip("/") + "/feed"
+    """Fetch posts from a newsletter RSS feed."""
+    # Only append /feed if not already a feed URL
+    if not newsletter_url.endswith((".rss", "/feed")):
+        rss_url = newsletter_url.rstrip("/") + "/feed"
+    else:
+        rss_url = newsletter_url
+
     print(f"Fetching RSS feed: {rss_url}")  # debug
     feed = feedparser.parse(rss_url)
     print(f"Number of entries found: {len(feed.entries)}")  # debug
 
     if not feed.entries:
-        print(f"No entries found for {newsletter_url}. Skipping.")
+        print(f"No entries found for {rss_url}. Skipping.")
         return []
 
     newsletter_name = feed.feed.get("title", newsletter_url)
@@ -58,6 +65,7 @@ def fetch_rss(newsletter_url):
     return posts
 
 def fetch_all_newsletters():
+    """Fetch posts from all newsletters listed in newsletters.txt."""
     if not os.path.exists(NEWS_FILE):
         print(f"Create {NEWS_FILE} with newsletter URLs, one per line.")
         return []
@@ -77,6 +85,7 @@ def fetch_all_newsletters():
     return all_posts
 
 def save_to_csv(posts):
+    """Save all fetched posts to CSV."""
     if not posts:
         print("No posts to save.")
         return
