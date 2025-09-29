@@ -22,7 +22,6 @@ def load_data():
     if os.path.exists(DB_FILE):
         try:
             conn = sqlite3.connect(DB_FILE)
-            # adjust columns to match your DB schema
             query = """
                 SELECT newsletter, title, url, author, published, summary, image, fetched_at
                 FROM posts
@@ -41,7 +40,6 @@ def load_data():
             df = None
 
     if df is None:
-        # empty placeholder
         df = pd.DataFrame(columns=["newsletter","title","url","author","published","summary","image","fetched_at"])
 
     # normalize columns
@@ -49,13 +47,13 @@ def load_data():
         if col not in df.columns:
             df[col] = ""
 
-    # parse published to datetime where possible
+    # parse published to datetime
     if "published" in df.columns:
         df["published_dt"] = pd.to_datetime(df["published"], errors="coerce")
     else:
         df["published_dt"] = pd.NaT
 
-    # ensure order newest first
+    # newest first
     df = df.sort_values("published_dt", ascending=False).reset_index(drop=True)
     return df
 
@@ -64,13 +62,11 @@ df = load_data()
 # ---------- SIDEBAR (filters & controls) ----------
 st.sidebar.header("Filters & Controls")
 
-# quick refresh (invalidates cache)
 if st.sidebar.button("🔁 Reload data"):
     load_data.clear()
     df = load_data()
     st.experimental_rerun()
 
-# date range default: last 90 days
 max_date = df["published_dt"].max()
 if pd.isna(max_date):
     max_date = datetime.utcnow()
@@ -78,18 +74,13 @@ default_start = (max_date - timedelta(days=90)).date() if max_date else (datetim
 start_date = st.sidebar.date_input("Start date", value=default_start)
 end_date = st.sidebar.date_input("End date", value=max_date.date() if max_date else datetime.utcnow().date())
 
-# newsletter filter
 newsletter_list = sorted(df["newsletter"].dropna().unique().tolist())
 selected_newsletters = st.sidebar.multiselect("Newsletters", options=newsletter_list, default=newsletter_list[:6] or newsletter_list)
 
-# author filter
 author_list = sorted(df["author"].dropna().unique().tolist())
 selected_authors = st.sidebar.multiselect("Authors", options=author_list, default=[])
 
-# keyword search
 search = st.sidebar.text_input("Search (title / summary)", placeholder="type keywords to search")
-
-# limit results
 max_rows = st.sidebar.number_input("Max rows to show", min_value=10, max_value=2000, value=200, step=10)
 
 # ---------- TOP SUMMARY ----------
@@ -112,21 +103,17 @@ st.markdown("---")
 
 # ---------- FILTERING ----------
 filtered = df.copy()
+# convert sidebar dates to UTC-aware datetimes
+start_dt = pd.to_datetime(start_date).tz_localize("UTC")
+end_dt = (pd.to_datetime(end_date) + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)).tz_localize("UTC")
 
-# date filter
-start_dt = pd.to_datetime(start_date)
-end_dt = pd.to_datetime(end_date) + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
 filtered = filtered[(filtered["published_dt"] >= start_dt) & (filtered["published_dt"] <= end_dt)]
 
-# newsletter filter
+
 if selected_newsletters:
     filtered = filtered[filtered["newsletter"].isin(selected_newsletters)]
-
-# author filter
 if selected_authors:
     filtered = filtered[filtered["author"].isin(selected_authors)]
-
-# search filter
 if search:
     mask = (
         filtered["title"].fillna("").str.contains(search, case=False, na=False) |
@@ -134,41 +121,46 @@ if search:
     )
     filtered = filtered[mask]
 
-# limit
 filtered = filtered.head(max_rows)
 
 # ---------- CHART & STATS ----------
 st.subheader("Activity overview")
-c1, c2 = st.columns([2,1])
+c1, c2 = st.columns([2,2])
+
 with c1:
-    # posts per newsletter bar chart
     posts_per = filtered.groupby("newsletter").size().sort_values(ascending=False)
     if not posts_per.empty:
         st.bar_chart(posts_per)
     else:
         st.info("No posts to chart for the current filters.")
+
 with c2:
-    st.write("### Top newsletters")
-    st.write(posts_per.head(10).to_frame("posts") if not posts_per.empty else "—")
+    st.write("### Posts over time")
+    if not filtered.empty:
+        posts_over_time = filtered.groupby(filtered["published_dt"].dt.date).size()
+        st.line_chart(posts_over_time)
+    else:
+        st.info("No posts to chart over time for the current filters.")
 
 st.markdown("---")
+st.write("### Top newsletters by post count")
+if not posts_per.empty:
+    st.dataframe(posts_per.head(10).to_frame("posts"))
+else:
+    st.write("—")
 
 # ---------- RESULTS TABLE ----------
 st.subheader(f"Showing {len(filtered)} posts")
-# columns to show in table
 table_cols = ["newsletter", "title", "author", "published_dt", "url"]
 if "summary" in filtered.columns:
     table_cols.insert(3, "summary")
 display_table = filtered[table_cols].copy()
 display_table = display_table.rename(columns={"published_dt":"published"})
-# make URLs clickable in streamlit table by showing as link column later
-
 st.dataframe(display_table.reset_index(drop=True), use_container_width=True)
 
-# ---------- PER-POST PREVIEW (first N results) ----------
+# ---------- PER-POST PREVIEW ----------
 st.markdown("---")
 st.subheader("Preview (first posts)")
-
 preview_count = st.number_input("Number of post previews to show", min_value=1, max_value=20, value=5, step=1)
 preview_df = filtered.head(preview_count).reset_index(drop=True)
 
