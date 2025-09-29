@@ -31,6 +31,16 @@ def fetch_rss(newsletter_url):
         published = parse_date(entry)
         summary = entry.get("summary", "").strip()
 
+        # Tags
+        tags_list = [tag['term'] for tag in entry.get('tags', [])]
+        tags = ", ".join(tags_list)
+
+        # Word count
+        word_count = len(summary.split())
+
+        # Image URL
+        image_url = entry.get("media_content", [{}])[0].get("url", "")
+
         if title and link:
             post = {
                 "newsletter": newsletter_name,
@@ -39,7 +49,9 @@ def fetch_rss(newsletter_url):
                 "author": author,
                 "published": published,
                 "summary": summary,
-                
+                "tags": tags,
+                "word_count": word_count,
+                "image_url": image_url
             }
             posts.append(post)
 
@@ -65,13 +77,14 @@ def fetch_all_newsletters():
     return all_posts
 
 def save_to_csv(posts):
+    if not posts:
+        print("No posts to save.")
+        return
+
     df = pd.DataFrame(posts)
     df.to_csv(CSV_FILE, index=False)
     print(f"Saved {len(posts)} posts to {CSV_FILE}")
 
 if __name__ == "__main__":
     posts = fetch_all_newsletters()
-    if posts:
-        save_to_csv(posts)
-    else:
-        print("No posts fetched.")
+    save_to_csv(posts)

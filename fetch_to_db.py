@@ -6,24 +6,54 @@ import feedparser
 DB_FILE = "substack.db"
 FEED_LIST = "newsletters.txt"
 
-def add_post(newsletter, title, url, author, published):
+# --- Make sure table exists first ---
+def init_db():
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS posts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            newsletter TEXT,
+            title TEXT,
+            url TEXT UNIQUE,
+            author TEXT,
+            published TEXT,
+            summary TEXT,
+            tags TEXT,
+            word_count INTEGER,
+            image_url TEXT,
+            fetched_at TEXT
+        )
+    """)
+    conn.commit()
+    conn.close()
+
+init_db()  # run immediately so table exists
+
+# --- Add posts ---
+def add_post(newsletter, title, url, author, published, summary="", tags="", word_count=0, image_url=""):
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
     try:
         c.execute("""
-            INSERT INTO posts (newsletter, title, url, author, published, fetched_at)
-            VALUES (?, ?, ?, ?, ?, ?)
-        """, (newsletter, title, url, author, published, datetime.now(timezone.utc).isoformat()))
+            INSERT INTO posts (newsletter, title, url, author, published, summary, tags, word_count, image_url, fetched_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            newsletter, title, url, author, published, summary, tags, word_count, image_url,
+            datetime.now(timezone.utc).isoformat()
+        ))
     except sqlite3.IntegrityError:
         pass  # Skip duplicates
     conn.commit()
     conn.close()
 
+# --- Parse dates ---
 def parse_date(entry):
     if entry.get("published_parsed"):
         return time.strftime("%Y-%m-%d %H:%M:%S", entry.published_parsed)
     return entry.get("published", "") or entry.get("updated", "")
 
+# --- Fetch RSS feeds ---
 def fetch_feed(url):
     rss_url = url.rstrip("/") + "/feed"
     print(f"Fetching: {rss_url}")
@@ -37,9 +67,16 @@ def fetch_feed(url):
         link = entry.get("link", "").strip()
         author = entry.get("author", "Unknown")
         published = parse_date(entry)
+        summary = entry.get("summary", "").strip()
+
+        tags_list = [tag['term'] for tag in entry.get('tags', [])]
+        tags = ", ".join(tags_list)
+
+        word_count = len(summary.split())
+        image_url = entry.get("media_content", [{}])[0].get("url", "")
 
         if title and link:
-            add_post(newsletter, title, link, author, published)
+            add_post(newsletter, title, link, author, published, summary, tags, word_count, image_url)
 
     print(f"Stored {len(entries)} posts from {newsletter}")
 

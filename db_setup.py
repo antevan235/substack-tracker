@@ -13,12 +13,14 @@ def init_db():
             url TEXT UNIQUE,
             author TEXT,
             published TEXT,
+            summary TEXT,
+            tags TEXT,
+            word_count INTEGER,
+            image_url TEXT,
             fetched_at TEXT
         )
     """)
     conn.commit()
     conn.close()
 
-if __name__ == "__main__":
-    init_db()
-    print(f"Database initialized at {DB_FILE}")
+init_db()
