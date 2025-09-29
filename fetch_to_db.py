@@ -1,7 +1,8 @@
 import sqlite3
-import time
 from datetime import datetime, timezone
 import feedparser
+from dateutil import parser as date_parser  # <- new import
+import time
 
 DB_FILE = "substack.db"
 FEED_LIST = "newsletters.txt"
@@ -28,7 +29,7 @@ def init_db():
     conn.commit()
     conn.close()
 
-init_db()  # run immediately so table exists
+init_db()
 
 # --- Add posts ---
 def add_post(newsletter, title, url, author, published, summary="", tags="", word_count=0, image_url=""):
@@ -43,15 +44,28 @@ def add_post(newsletter, title, url, author, published, summary="", tags="", wor
             datetime.now(timezone.utc).isoformat()
         ))
     except sqlite3.IntegrityError:
-        pass  # Skip duplicates
+        pass
     conn.commit()
     conn.close()
 
-# --- Parse dates ---
+# --- Parse dates more robustly ---
 def parse_date(entry):
-    if entry.get("published_parsed"):
-        return time.strftime("%Y-%m-%d %H:%M:%S", entry.published_parsed)
-    return entry.get("published", "") or entry.get("updated", "")
+    date_str = ""
+    if entry.get("published"):
+        date_str = entry["published"]
+    elif entry.get("updated"):
+        date_str = entry["updated"]
+    elif entry.get("published_parsed"):
+        date_str = time.strftime("%Y-%m-%d %H:%M:%S", entry.published_parsed)
+    
+    if date_str:
+        try:
+            # Use dateutil to parse and convert to ISO
+            dt = date_parser.parse(date_str)
+            return dt.strftime("%Y-%m-%d %H:%M:%S")
+        except Exception:
+            return date_str  # fallback to original if parsing fails
+    return ""
 
 # --- Fetch RSS feeds ---
 def fetch_feed(url):
@@ -67,23 +81,15 @@ def fetch_feed(url):
         link = entry.get("link", "").strip()
 
         # --- Author detection ---
-        author = entry.get("author")
-        if not author:
-            author = feed.feed.get("author")  # fallback to feed author
-        if not author:
-            author = newsletter  # fallback to newsletter name
+        author = entry.get("author") or feed.feed.get("author") or newsletter
 
         published = parse_date(entry)
         summary = entry.get("summary", "").strip()
 
-        # --- Tags ---
         tags_list = [tag['term'] for tag in entry.get('tags', [])]
         tags = ", ".join(tags_list)
 
-        # --- Word count ---
         word_count = len(summary.split())
-
-        # --- Image URL ---
         image_url = entry.get("media_content", [{}])[0].get("url", "")
 
         if title and link:
