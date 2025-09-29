@@ -4,6 +4,7 @@ import pandas as pd
 import sqlite3
 import os
 from datetime import datetime, timedelta
+import pytz  # for UTC localization
 
 # ---------- CONFIG ----------
 DB_FILE = "substack.db"
@@ -23,7 +24,7 @@ def load_data():
         try:
             conn = sqlite3.connect(DB_FILE)
             query = """
-                SELECT newsletter, title, url, author, published, summary, image, fetched_at
+                SELECT newsletter, title, url, author, published, summary, image_url as image, fetched_at
                 FROM posts
             """
             df = pd.read_sql_query(query, conn)
@@ -47,9 +48,9 @@ def load_data():
         if col not in df.columns:
             df[col] = ""
 
-    # parse published to datetime
+    # parse published to datetime (UTC-aware)
     if "published" in df.columns:
-        df["published_dt"] = pd.to_datetime(df["published"], errors="coerce")
+        df["published_dt"] = pd.to_datetime(df["published"], errors="coerce").dt.tz_localize('UTC', ambiguous='NaT', nonexistent='NaT')
     else:
         df["published_dt"] = pd.NaT
 
@@ -69,17 +70,23 @@ if st.sidebar.button("🔁 Reload data"):
 
 max_date = df["published_dt"].max()
 if pd.isna(max_date):
-    max_date = datetime.utcnow()
+    max_date = datetime.utcnow().replace(tzinfo=pytz.UTC)
 default_start = (max_date - timedelta(days=90)).date() if max_date else (datetime.utcnow() - timedelta(days=90)).date()
+
 start_date = st.sidebar.date_input("Start date", value=default_start)
 end_date = st.sidebar.date_input("End date", value=max_date.date() if max_date else datetime.utcnow().date())
 
+# --- Newsletters filter
 newsletter_list = sorted(df["newsletter"].dropna().unique().tolist())
-selected_newsletters = st.sidebar.multiselect("Newsletters", options=newsletter_list, default=newsletter_list[:6] or newsletter_list)
+selected_newsletters = st.sidebar.multiselect(
+    "Newsletters", options=newsletter_list, default=newsletter_list[:6] or newsletter_list
+)
 
+# --- Authors filter
 author_list = sorted(df["author"].dropna().unique().tolist())
 selected_authors = st.sidebar.multiselect("Authors", options=author_list, default=[])
 
+# --- Search and max rows
 search = st.sidebar.text_input("Search (title / summary)", placeholder="type keywords to search")
 max_rows = st.sidebar.number_input("Max rows to show", min_value=10, max_value=2000, value=200, step=10)
 
@@ -103,94 +110,5 @@ st.markdown("---")
 
 # ---------- FILTERING ----------
 filtered = df.copy()
-start_dt = pd.to_datetime(start_date)
-end_dt = pd.to_datetime(end_date) + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
-filtered = filtered[(filtered["published_dt"] >= start_dt) & (filtered["published_dt"] <= end_dt)]
 
-if selected_newsletters:
-    filtered = filtered[filtered["newsletter"].isin(selected_newsletters)]
-if selected_authors:
-    filtered = filtered[filtered["author"].isin(selected_authors)]
-if search:
-    mask = (
-        filtered["title"].fillna("").str.contains(search, case=False, na=False) |
-        filtered["summary"].fillna("").str.contains(search, case=False, na=False)
-    )
-    filtered = filtered[mask]
-
-filtered = filtered.head(max_rows)
-
-# ---------- CHART & STATS ----------
-st.subheader("Activity overview")
-c1, c2 = st.columns([2,2])
-
-with c1:
-    posts_per = filtered.groupby("newsletter").size().sort_values(ascending=False)
-    if not posts_per.empty:
-        st.bar_chart(posts_per)
-    else:
-        st.info("No posts to chart for the current filters.")
-
-with c2:
-    st.write("### Posts over time")
-    if not filtered.empty:
-        posts_over_time = filtered.groupby(filtered["published_dt"].dt.date).size()
-        st.line_chart(posts_over_time)
-    else:
-        st.info("No posts to chart over time for the current filters.")
-
-st.markdown("---")
-st.write("### Top newsletters by post count")
-if not posts_per.empty:
-    st.dataframe(posts_per.head(10).to_frame("posts"))
-else:
-    st.write("—")
-
-# ---------- RESULTS TABLE ----------
-st.subheader(f"Showing {len(filtered)} posts")
-table_cols = ["newsletter", "title", "author", "published_dt", "url"]
-if "summary" in filtered.columns:
-    table_cols.insert(3, "summary")
-display_table = filtered[table_cols].copy()
-display_table = display_table.rename(columns={"published_dt":"published"})
-st.dataframe(display_table.reset_index(drop=True), use_container_width=True)
-
-# ---------- PER-POST PREVIEW ----------
-st.markdown("---")
-st.subheader("Preview (first posts)")
-preview_count = st.number_input("Number of post previews to show", min_value=1, max_value=20, value=5, step=1)
-preview_df = filtered.head(preview_count).reset_index(drop=True)
-
-for i, row in preview_df.iterrows():
-    with st.expander(f"{i+1}. {row['title']} — {row['newsletter']} ({row['published_dt'].date() if pd.notna(row['published_dt']) else 'N/A'})", expanded=(i==0)):
-        left, right = st.columns([3,1])
-        with left:
-            st.markdown(f"**{row['title']}**  \n")
-            if row.get("author"):
-                st.markdown(f"*By {row['author']}*")
-            if row.get("published_dt") and pd.notna(row['published_dt']):
-                st.markdown(f"**Published:** {row['published_dt'].strftime('%Y-%m-%d %H:%M:%S UTC')}")
-            if row.get("summary"):
-                st.markdown(row["summary"], unsafe_allow_html=True)
-            st.markdown(f"[Open original post]({row['url']})")
-        with right:
-            if row.get("image"):
-                try:
-                    st.image(row["image"], use_column_width=True)
-                except Exception:
-                    st.write("Image not available")
-            else:
-                st.write("No image")
-
-# ---------- DOWNLOAD BUTTON ----------
-st.markdown("---")
-st.subheader("Export / Share")
-export_df = filtered.copy()
-if not export_df.empty:
-    csv_bytes = export_df.to_csv(index=False).encode("utf-8")
-    st.download_button("⬇️ Download filtered CSV", data=csv_bytes, file_name="substack_filtered.csv", mime="text/csv")
-else:
-    st.write("No rows to export for the current filters.")
-
-st.write("")
-st.caption("Tip: To add or remove newsletters, edit newsletters.txt in the project folder (one base URL per line). Then run the fetch script to update the DB/CSV.")
+# convert sideb
