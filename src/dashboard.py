@@ -42,7 +42,7 @@ class DataManager:
             conn.close()
 
     @st.cache_data(ttl=config.CACHE_TTL)
-    def load_data(self) -> pd.DataFrame:
+    def load_data(_self) -> pd.DataFrame:
         """Load and prepare data from database or CSV"""
         df = self._load_from_source()
         return self._prepare_dataframe(df)
