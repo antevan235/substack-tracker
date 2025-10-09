@@ -111,7 +111,7 @@ class Dashboard:
         if st.sidebar.button("🔁 Reload data"):
             self.data_manager.load_data.clear()
             self.df = self.data_manager.load_data()
-            st.experimental_rerun()
+            st.rerun*()
 
         # Date filters
         max_date = self.df["published_dt"].max() or datetime.now(pytz.UTC)
