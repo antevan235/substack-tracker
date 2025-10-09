@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 class DatabaseManager:
     """Manages database operations and schema setup"""
     
-    def __init__(self, db_path: str = "substack.db"):
+    def __init__(self, db_path: str = "output/substack.db"):
         self.db_path = Path(db_path)
         self.schema = """
         CREATE TABLE IF NOT EXISTS posts (

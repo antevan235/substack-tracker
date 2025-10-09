@@ -2,13 +2,13 @@ import sqlite3
 import pandas as pd
 
 # Connect to your database
-conn = sqlite3.connect("substack.db")
+conn = sqlite3.connect("output/substack.db")
 
 # Read all posts ordered by newest first
 df = pd.read_sql_query("SELECT * FROM posts ORDER BY published DESC", conn)
 
 # Save to CSV
-df.to_csv("latest_posts.csv", index=False)
+df.to_csv("output/latest_posts.csv", index=False)
 
 conn.close()
 
