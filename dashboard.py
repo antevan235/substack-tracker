@@ -14,11 +14,7 @@ st.set_page_config(page_title="Substack Tracker", layout="wide", initial_sidebar
 
 # ---------- DATA LOADING ----------
 @st.cache_data(ttl=60)
-def load_data():
-    """
-    Load posts from SQLite DB if available, otherwise from CSV.
-    Returns DataFrame with normalized columns and parsed dates.
-    """
+def load_db_data():
     df = None
     if os.path.exists(DB_FILE):
         try:
@@ -32,61 +28,68 @@ def load_data():
         except Exception as e:
             st.warning(f"Error reading {DB_FILE}: {e}")
             df = None
-
     if df is None and os.path.exists(CSV_FILE):
         try:
             df = pd.read_csv(CSV_FILE)
         except Exception as e:
             st.warning(f"Error reading {CSV_FILE}: {e}")
             df = None
-
     if df is None:
         df = pd.DataFrame(columns=["newsletter","title","url","author","published","summary","image","fetched_at"])
-
+    
     # normalize columns
     for col in ["newsletter","title","url","author","summary","image","fetched_at"]:
         if col not in df.columns:
             df[col] = ""
-
+    
     # parse published to datetime (UTC-aware)
     if "published" in df.columns:
         df["published_dt"] = pd.to_datetime(df["published"], errors="coerce").dt.tz_localize('UTC', ambiguous='NaT', nonexistent='NaT')
     else:
         df["published_dt"] = pd.NaT
-
+    
     # newest first
     df = df.sort_values("published_dt", ascending=False).reset_index(drop=True)
     return df
 
-df = load_data()
+def load_uploaded_csv(uploaded_file):
+    df = pd.read_csv(uploaded_file)
+    if "published" in df.columns:
+        df["published_dt"] = pd.to_datetime(df["published"], errors="coerce").dt.tz_localize('UTC', ambiguous='NaT', nonexistent='NaT')
+    else:
+        df["published_dt"] = pd.NaT
+    return df
 
-# ---------- SIDEBAR (filters & controls) ----------
+def filter_newsletter(df, newsletter):
+    return df[df['newsletter'] == newsletter]
+
+df = load_db_data()
+
+# ---------- SIDEBAR ----------
 st.sidebar.header("Filters & Controls")
 
 if st.sidebar.button("🔁 Reload data"):
-    load_data.clear()
-    df = load_data()
-    st.experimental_rerun()
+    load_db_data.clear()
+    df = load_db_data()
+    if "rerun_flag" not in st.session_state:
+        st.session_state.rerun_flag = False
+    st.session_state.rerun_flag = not st.session_state.rerun_flag  # toggle to refresh
+    st.experimental_rerun = lambda: None  # dummy no-op
 
 max_date = df["published_dt"].max()
 if pd.isna(max_date):
     max_date = datetime.utcnow().replace(tzinfo=pytz.UTC)
-default_start = (max_date - timedelta(days=90)).date() if max_date else (datetime.utcnow() - timedelta(days=90)).date()
+default_start = (max_date - timedelta(days=90)).date()
 
 start_date = st.sidebar.date_input("Start date", value=default_start)
-end_date = st.sidebar.date_input("End date", value=max_date.date() if max_date else datetime.utcnow().date())
+end_date = st.sidebar.date_input("End date", value=max_date.date())
 
-# --- Newsletters filter
-newsletter_list = sorted(df["newsletter"].dropna().unique().tolist())
-selected_newsletters = st.sidebar.multiselect(
-    "Newsletters", options=newsletter_list, default=newsletter_list[:6] or newsletter_list
-)
+newsletter_list = sorted(df["newsletter"].dropna().unique())
+selected_newsletters = st.sidebar.multiselect("Newsletters", options=newsletter_list, default=newsletter_list[:6] or newsletter_list)
 
-# --- Authors filter
-author_list = sorted(df["author"].dropna().unique().tolist())
+author_list = sorted(df["author"].dropna().unique())
 selected_authors = st.sidebar.multiselect("Authors", options=author_list, default=[])
 
-# --- Search and max rows
 search = st.sidebar.text_input("Search (title / summary)", placeholder="type keywords to search")
 max_rows = st.sidebar.number_input("Max rows to show", min_value=10, max_value=2000, value=200, step=10)
 
@@ -108,7 +111,26 @@ with col4:
 
 st.markdown("---")
 
-# ---------- FILTERING ----------
-filtered = df.copy()
-
-# convert sideb
+# ---------- UPLOAD CSV ----------
+uploaded_file = st.file_uploader("Upload your CSV file", type=["csv"])
+if uploaded_file:
+    df_uploaded = load_uploaded_csv(uploaded_file)
+    
+    if "newsletter" not in df_uploaded.columns:
+        st.error("CSV must have a column named 'newsletter'")
+    else:
+        newsletter_list = sorted(df_uploaded["newsletter"].dropna().unique())
+        selected_newsletter = st.selectbox("Select a newsletter", newsletter_list)
+        
+        if "rerun_flag" not in st.session_state:
+            st.session_state.rerun_flag = False
+        
+        filtered_df = filter_newsletter(df_uploaded, selected_newsletter)
+        st.write(filtered_df)
+        
+        if st.button("Refresh"):
+            st.session_state.rerun_flag = not st.session_state.rerun_flag
+            st.experimental_rerun = lambda: None  # dummy
+            st.experimental_rerun()  # no-op
+else:
+    st.info("Upload a CSV file to get started.")
