@@ -1,16 +1,24 @@
-from dataclasses import dataclass
-from typing import List, Optional, Dict, Any
 import sqlite3
-from datetime import datetime, timezone
 import feedparser
+from datetime import datetime, timezone
 from dateutil import parser as date_parser
-import time
-import difflib
-import os
+from typing import List, Dict, Any, Optional
 import logging
 from contextlib import contextmanager
+import os
 from concurrent.futures import ThreadPoolExecutor
-from urllib.parse import urlparse, urljoin
+from dataclasses import dataclass
+from urllib.parse import urljoin
+
+# Configuration
+CONFIG = {
+    'DB_FILE': 'substack.db',
+    'FEED_LIST': 'newsletters.txt',
+    'BATCH_SIZE': 50,
+    'MAX_WORKERS': 4,
+    'POSTS_LIMIT': 60,
+    'TITLE_SIMILARITY': 0.9
+}
 
 # Configure logging
 logging.basicConfig(
@@ -19,19 +27,9 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Configuration constants
-CONFIG = {
-    'DB_FILE': "substack.db",
-    'FEED_LIST': "newsletters.txt",
-    'SIMILARITY_THRESHOLD': 0.9,
-    'MAX_POSTS_PER_FEED': 60,
-    'BATCH_SIZE': 50,
-    'MAX_WORKERS': 4
-}
-
 @dataclass
 class Post:
-    """Data class for blog posts"""
+    """Data structure for blog posts"""
     newsletter: str
     title: str
     url: str
@@ -41,16 +39,14 @@ class Post:
     tags: str
     word_count: int
     image_url: str
-    fetched_at: str = ''
 
-class DatabaseManager:
-    """Handles all database operations"""
+class Database:
     def __init__(self, db_file: str):
         self.db_file = db_file
-        self._init_db()
+        self._initialize()
 
     @contextmanager
-    def get_connection(self):
+    def connection(self):
         """Context manager for database connections"""
         conn = sqlite3.connect(self.db_file)
         try:
@@ -58,11 +54,10 @@ class DatabaseManager:
         finally:
             conn.close()
 
-    def _init_db(self) -> None:
-        """Initialize database schema"""
-        with self.get_connection() as conn:
-            c = conn.cursor()
-            c.execute("""
+    def _initialize(self):
+        """Initialize database with indexes"""
+        with self.connection() as conn:
+            conn.executescript('''
                 CREATE TABLE IF NOT EXISTS posts (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     newsletter TEXT,
@@ -75,156 +70,133 @@ class DatabaseManager:
                     word_count INTEGER,
                     image_url TEXT,
                     fetched_at TEXT
-                )
-            """)
-            # Add indexes for better query performance
-            c.execute("CREATE INDEX IF NOT EXISTS idx_url ON posts(url)")
-            c.execute("CREATE INDEX IF NOT EXISTS idx_newsletter ON posts(newsletter)")
-            conn.commit()
+                );
+                CREATE INDEX IF NOT EXISTS idx_url ON posts(url);
+                CREATE INDEX IF NOT EXISTS idx_newsletter_title ON posts(newsletter, title);
+            ''')
 
-    def add_posts_batch(self, posts: List[Post]) -> int:
-        """Add multiple posts to database in a single transaction"""
+    def insert_posts(self, posts: List[Post]) -> int:
+        """Batch insert posts into database"""
         if not posts:
             return 0
 
-        with self.get_connection() as conn:
-            c = conn.cursor()
-            inserted = 0
-            
-            # Use executemany for better performance
+        with self.connection() as conn:
             values = [(
                 post.newsletter, post.title, post.url, post.author,
                 post.published, post.summary, post.tags,
                 post.word_count, post.image_url,
                 datetime.now(timezone.utc).isoformat()
             ) for post in posts]
-            
-            c.executemany("""
+
+            return conn.executemany('''
                 INSERT OR IGNORE INTO posts (
                     newsletter, title, url, author, published,
                     summary, tags, word_count, image_url, fetched_at
-                )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, values)
-            
-            inserted = c.rowcount
-            conn.commit()
-            return inserted
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', values).rowcount
 
-    def get_existing_titles(self, newsletter: str) -> List[str]:
-        """Get existing titles for a newsletter"""
-        with self.get_connection() as conn:
-            c = conn.cursor()
-            c.execute("SELECT title FROM posts WHERE newsletter = ?", (newsletter,))
-            return [row[0] for row in c.fetchall()]
+    def get_titles(self, newsletter: str) -> List[str]:
+        """Get existing titles for duplicate checking"""
+        with self.connection() as conn:
+            return [row[0] for row in conn.execute(
+                "SELECT title FROM posts WHERE newsletter = ?", 
+                (newsletter,)
+            )]
 
 class FeedProcessor:
-    """Handles RSS feed processing"""
-    def __init__(self, db_manager: DatabaseManager):
-        self.db_manager = db_manager
-
-    @staticmethod
-    def normalize_feed_url(url: str) -> str:
-        """Normalize feed URL to ensure proper format"""
-        if not url.endswith((".rss", "/feed")):
-            return urljoin(url.rstrip("/"), f"/feed?limit={CONFIG['MAX_POSTS_PER_FEED']}")
-        return url
-
-    @staticmethod
-    def parse_date(entry: Dict[str, Any]) -> str:
-        """Parse date from feed entry"""
-        date_fields = ['published', 'updated']
-        for field in date_fields:
-            if entry.get(field):
-                try:
-                    dt = date_parser.parse(entry[field])
-                    return dt.strftime("%Y-%m-%d %H:%M:%S")
-                except Exception:
-                    continue
-        
-        if entry.get('published_parsed'):
-            return time.strftime("%Y-%m-%d %H:%M:%S", entry.published_parsed)
-        
-        return ""
-
-    def is_similar_title(self, title: str, existing_titles: List[str]) -> bool:
-        """Check if a title is similar to existing ones"""
-        return any(
-            difflib.SequenceMatcher(None, title, existing).ratio() > 
-            CONFIG['SIMILARITY_THRESHOLD']
-            for existing in existing_titles
-        )
+    def __init__(self, db: Database):
+        self.db = db
 
     def process_feed(self, url: str) -> Optional[int]:
-        """Process a single feed"""
+        """Process a single feed URL"""
         try:
-            rss_url = self.normalize_feed_url(url)
-            logger.info(f"Fetching: {rss_url}")
+            feed_url = self._normalize_url(url)
+            logger.info(f"Fetching: {feed_url}")
             
-            feed = feedparser.parse(rss_url)
+            feed = feedparser.parse(feed_url)
             if feed.bozo:
-                logger.error(f"Error parsing feed {rss_url}: {feed.bozo_exception}")
+                logger.error(f"Feed parse error {feed_url}: {feed.bozo_exception}")
                 return None
 
             newsletter = feed.feed.get("title", url)
-            existing_titles = self.db_manager.get_existing_titles(newsletter)
-            posts_to_add = []
-
-            for entry in feed.entries:
-                post = self._create_post_from_entry(entry, feed, newsletter)
-                if post and not self.is_similar_title(post.title, existing_titles):
-                    posts_to_add.append(post)
-
-                if len(posts_to_add) >= CONFIG['BATCH_SIZE']:
-                    self.db_manager.add_posts_batch(posts_to_add)
-                    posts_to_add = []
-
-            # Insert remaining posts
-            inserted_count = self.db_manager.add_posts_batch(posts_to_add)
-            logger.info(f"Inserted {inserted_count}/{len(feed.entries)} posts from {newsletter}")
-            return inserted_count
+            existing_titles = self.db.get_titles(newsletter)
+            posts = self._process_entries(feed.entries, feed, newsletter, existing_titles)
+            
+            inserted = self.db.insert_posts(posts)
+            logger.info(f"Inserted {inserted}/{len(feed.entries)} posts from {newsletter}")
+            return inserted
 
         except Exception as e:
-            logger.error(f"Error processing feed {url}: {e}")
+            logger.error(f"Error processing {url}: {e}")
             return None
 
-    def _create_post_from_entry(
-        self, entry: Dict[str, Any], feed: Any, newsletter: str
-    ) -> Optional[Post]:
-        """Create a Post object from feed entry"""
-        title = entry.get("title", "").strip()
-        link = entry.get("link", "").strip()
+    @staticmethod
+    def _normalize_url(url: str) -> str:
+        """Ensure URL is in correct format"""
+        if not url.endswith((".rss", "/feed")):
+            return urljoin(url.rstrip("/"), f"/feed?limit={CONFIG['POSTS_LIMIT']}")
+        return url
 
-        if not (title and link):
-            return None
+    @staticmethod
+    def _parse_date(entry: Dict[str, Any]) -> str:
+        """Extract and parse date from entry"""
+        for field in ['published', 'updated']:
+            if date_str := entry.get(field):
+                try:
+                    return date_parser.parse(date_str).strftime("%Y-%m-%d %H:%M:%S")
+                except Exception:
+                    continue
+        return datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
 
-        return Post(
-            newsletter=newsletter,
-            title=title,
-            url=link,
-            author=entry.get("author") or feed.feed.get("author") or newsletter,
-            published=self.parse_date(entry),
-            summary=entry.get("summary", "").strip(),
-            tags=", ".join(tag['term'] for tag in entry.get('tags', [])),
-            word_count=len(entry.get("summary", "").split()),
-            image_url=entry.get("media_content", [{}])[0].get("url", "")
-        )
+    def _process_entries(
+        self, 
+        entries: List[Dict], 
+        feed: Any, 
+        newsletter: str,
+        existing_titles: List[str]
+    ) -> List[Post]:
+        """Process feed entries into Post objects"""
+        from difflib import SequenceMatcher
+        posts = []
+
+        for entry in entries:
+            title = entry.get("title", "").strip()
+            url = entry.get("link", "").strip()
+            
+            if not (title and url) or any(
+                SequenceMatcher(None, title, existing).ratio() > CONFIG['TITLE_SIMILARITY']
+                for existing in existing_titles
+            ):
+                continue
+
+            posts.append(Post(
+                newsletter=newsletter,
+                title=title,
+                url=url,
+                author=entry.get("author") or feed.feed.get("author") or newsletter,
+                published=self._parse_date(entry),
+                summary=entry.get("summary", "").strip(),
+                tags=", ".join(tag['term'] for tag in entry.get('tags', [])),
+                word_count=len(entry.get("summary", "").split()),
+                image_url=entry.get("media_content", [{}])[0].get("url", "")
+            ))
+
+        return posts
 
 def main():
     """Main execution function"""
     if not os.path.exists(CONFIG['FEED_LIST']):
-        logger.error(f"{CONFIG['FEED_LIST']} not found. Please create it with one feed URL per line.")
+        logger.error(f"Feed list {CONFIG['FEED_LIST']} not found")
         return
 
-    db_manager = DatabaseManager(CONFIG['DB_FILE'])
-    processor = FeedProcessor(db_manager)
+    db = Database(CONFIG['DB_FILE'])
+    processor = FeedProcessor(db)
 
-    with open(CONFIG['FEED_LIST'], "r", encoding="utf-8") as f:
+    with open(CONFIG['FEED_LIST'], 'r', encoding='utf-8') as f:
         urls = [line.strip() for line in f if line.strip()]
 
-    # Process feeds in parallel
     with ThreadPoolExecutor(max_workers=CONFIG['MAX_WORKERS']) as executor:
-        executor.map(processor.process_feed, urls)
+        list(executor.map(processor.process_feed, urls))
 
 if __name__ == "__main__":
     main()
