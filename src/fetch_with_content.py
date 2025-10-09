@@ -3,8 +3,8 @@ import pandas as pd
 import os
 from datetime import datetime, timezone
 
-CSV_FILE = "substack_posts.csv"
-NEWS_FILE = "newsletters.txt"
+CSV_FILE = "output/substack_posts.csv"
+NEWS_FILE = "data/newsletters.txt"
 
 def parse_date(entry):
     """Parse published or updated date into ISO format."""

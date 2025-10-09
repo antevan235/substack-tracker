@@ -12,8 +12,8 @@ from contextlib import contextmanager
 @dataclass
 class Config:
     """Application configuration"""
-    DB_FILE: str = "substack.db"
-    CSV_FILE: str = "substack_posts.csv"
+    DB_FILE: str = "output/substack.db"
+    CSV_FILE: str = "output/substack_posts.csv"
     DEFAULT_DAYS: int = 90
     MIN_ROWS: int = 10
     MAX_ROWS: int = 2000

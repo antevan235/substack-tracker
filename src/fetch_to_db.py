@@ -12,8 +12,8 @@ from urllib.parse import urljoin
 
 # Configuration
 CONFIG = {
-    'DB_FILE': 'substack.db',
-    'FEED_LIST': 'newsletters.txt',
+    'DB_FILE': 'output/substack.db',
+    'FEED_LIST': 'data/newsletters.txt',
     'BATCH_SIZE': 50,
     'MAX_WORKERS': 4,
     'POSTS_LIMIT': 60,
