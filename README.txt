@@ -1,4 +1,12 @@
-# from PowerShell — use full path if streamlit not on PATH:
-& "C:\Users\Administrator\AppData\Roaming\Python\Python313\Scripts\streamlit.exe" run dashboard.py
-# or if streamlit is on PATH:
-streamlit run dashboard.py
+# Substack Tracker - Quick demo
+
+## Run locally
+python -m venv .venv
+.venv/Scripts/activate
+pip install -r requirements.txt
+python -m streamlit run dashboard.py
+
+## Deploy (streamlit cloud)
+1. Push repo to GitHub
+2. Create app on Streamlit Community Cloud and select this repo
+3. Set secrets in the Cloud UI if needed
