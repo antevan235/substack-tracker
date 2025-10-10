@@ -1,7 +1,7 @@
 """Contact extraction and validation functions.
 
 This module provides utilities for extracting and validating email addresses
-and Twitter handles from author strings and other contact information.
+and X/Twitter handles from author strings and other contact information.
 """
 
 import re
@@ -34,16 +34,16 @@ def validate_email(email: str) -> bool:
 
 
 def validate_twitter_handle(handle: str) -> Optional[str]:
-    """Validate and normalize Twitter handle.
+    """Validate and normalize X/Twitter handle.
     
-    Extracts Twitter handle from various formats:
+    Extracts X/Twitter handle from various formats:
     - Plain username: "username" -> "username"
     - With @: "@username" -> "username"
     - Twitter URL: "twitter.com/username" -> "username"
     - X.com URL: "x.com/username" -> "username"
     
     Args:
-        handle: Twitter handle or URL string
+        handle: X/Twitter handle or URL string
         
     Returns:
         Normalized username (without @) if valid, None otherwise
@@ -68,7 +68,7 @@ def validate_twitter_handle(handle: str) -> Optional[str]:
     at_match = re.match(r'^@?([a-zA-Z0-9_]+)$', handle)
     if at_match:
         username = at_match.group(1)
-        # Twitter usernames are 1-15 characters
+        # X/Twitter usernames are 1-15 characters
         if 1 <= len(username) <= 15:
             return username
     
@@ -90,7 +90,7 @@ def extract_contacts(
         List of dicts with contact info including:
         - name: Author name
         - email: Email address (validated)
-        - twitter: Twitter handle (normalized)
+        - twitter: X/Twitter handle (normalized)
         - newsletter: Newsletter name
         - posts: Post count
         - last_post: Most recent post date
@@ -125,7 +125,7 @@ def extract_contacts(
                     author_df = df[df['author'] == author['author']]
                     last_post = author_df['published_dt'].max()
                     
-                    # Extract Twitter
+                    # Extract X/Twitter handle
                     twitter = None
                     if isinstance(author['author'], str):
                         twitter = validate_twitter_handle(author['author'])
@@ -157,7 +157,7 @@ def extract_contacts(
                     
                     last_post = author_df['published_dt'].max()
                     
-                    # Extract Twitter
+                    # Extract X/Twitter handle
                     twitter = None
                     if isinstance(star['author'], str):
                         twitter = validate_twitter_handle(star['author'])
@@ -189,7 +189,7 @@ def extract_contacts(
                     
                     last_post = author_df['published_dt'].max()
                     
-                    # Extract Twitter
+                    # Extract X/Twitter handle
                     twitter = None
                     if isinstance(voice['author'], str):
                         twitter = validate_twitter_handle(voice['author'])
@@ -222,7 +222,7 @@ def extract_contacts(
                         author_df = newsletter_df[newsletter_df['author'] == author]
                         last_post = author_df['published_dt'].max()
                         
-                        # Extract Twitter
+                        # Extract X/Twitter handle
                         twitter = None
                         if isinstance(author, str):
                             twitter = validate_twitter_handle(author)

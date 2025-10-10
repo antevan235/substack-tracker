@@ -1,7 +1,7 @@
 """Action buttons and contact export UI components.
 
 This module provides UI components for author outreach actions including
-email drafting, clipboard copy, Twitter links, and CSV export.
+email drafting, clipboard copy, X (formerly Twitter) links, and CSV export.
 """
 
 import urllib.parse
@@ -33,7 +33,7 @@ def render_action_buttons(
         category: Author category (Hot Author, Rising Star, etc.)
         posts: Number of posts
         last_post: Date of last post
-        twitter: Twitter handle (if available)
+        twitter: X/Twitter handle (if available)
     """
     if not email:
         return
@@ -72,15 +72,15 @@ def render_action_buttons(
     
     if twitter and len(cols) > 2:
         with cols[2]:
-            # Twitter link button
-            twitter_url = f"https://twitter.com/{twitter}"
+            # X link button
+            twitter_url = f"https://x.com/{twitter}"
             st.markdown(
                 f'<a href="{twitter_url}" target="_blank" '
                 f'style="text-decoration: none;">'
                 f'<button style="width: 100%; padding: 0.25rem 0.75rem; '
                 f'background-color: #1DA1F2; color: white; border: none; '
                 f'border-radius: 0.25rem; cursor: pointer; font-size: 0.875rem;">'
-                f'🐦 Twitter</button></a>',
+                f'🐦 X</button></a>',
                 unsafe_allow_html=True
             )
 
@@ -148,7 +148,7 @@ def export_contacts_csv(contacts: List[Dict[str, any]]) -> bytes:
     if not contacts:
         # Return empty CSV with headers
         df = pd.DataFrame(columns=[
-            'Name', 'Email', 'Twitter', 'Newsletter', 
+            'Name', 'Email', 'X Handle', 'Newsletter', 
             'Posts', 'Last Post', 'Category'
         ])
     else:
@@ -157,14 +157,14 @@ def export_contacts_csv(contacts: List[Dict[str, any]]) -> bytes:
         df = df.rename(columns={
             'name': 'Name',
             'email': 'Email',
-            'twitter': 'Twitter',
+            'twitter': 'X Handle',
             'newsletter': 'Newsletter',
             'posts': 'Posts',
             'last_post': 'Last Post',
             'category': 'Category'
         })
         # Reorder columns
-        df = df[['Name', 'Email', 'Twitter', 'Newsletter', 
+        df = df[['Name', 'Email', 'X Handle', 'Newsletter', 
                  'Posts', 'Last Post', 'Category']]
     
     return df.to_csv(index=False).encode('utf-8')
@@ -189,7 +189,8 @@ def render_contact_export_tab(df: pd.DataFrame) -> None:
         category_filter = st.selectbox(
             "Filter by Category",
             options=['All', 'Hot Authors', 'Rising Stars', 'New Voices', 'Going Cold'],
-            index=0
+            index=0,
+            key="contact_export_category_filter"
         )
     
     # Map display names to internal category names
@@ -214,7 +215,7 @@ def render_contact_export_tab(df: pd.DataFrame) -> None:
     with col_a:
         st.metric("📊 Found Contacts", total_contacts)
     with col_b:
-        st.metric("⚠️ Missing Twitter", missing_info)
+        st.metric("⚠️ Missing X Handle", missing_info)
     
     if not contacts:
         st.info(
@@ -259,7 +260,7 @@ def render_contact_export_tab(df: pd.DataFrame) -> None:
     df_contacts = df_contacts.rename(columns={
         'name': 'Name',
         'email': 'Email',
-        'twitter': 'Twitter',
+        'twitter': 'X Handle',
         'newsletter': 'Newsletter',
         'posts': 'Posts',
         'last_post': 'Last Post',
@@ -267,7 +268,7 @@ def render_contact_export_tab(df: pd.DataFrame) -> None:
     })
     
     # Reorder and select columns
-    display_cols = ['Name', 'Email', 'Twitter', 'Newsletter', 
+    display_cols = ['Name', 'Email', 'X Handle', 'Newsletter', 
                     'Posts', 'Last Post', 'Category']
     df_contacts = df_contacts[display_cols]
     
@@ -279,7 +280,7 @@ def render_contact_export_tab(df: pd.DataFrame) -> None:
         column_config={
             "Name": st.column_config.TextColumn("Name", width="medium"),
             "Email": st.column_config.TextColumn("Email", width="medium"),
-            "Twitter": st.column_config.TextColumn("Twitter", width="small"),
+            "X Handle": st.column_config.TextColumn("X Handle", width="small"),
             "Newsletter": st.column_config.TextColumn("Newsletter", width="medium"),
             "Posts": st.column_config.NumberColumn("Posts", width="small"),
             "Last Post": st.column_config.TextColumn("Last Post", width="small"),
