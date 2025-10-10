@@ -9,7 +9,8 @@ import streamlit as st
 from config import Config
 from data.loader import DataManager
 from ui.components import render_sidebar, render_metrics
-from ui.tabs import render_newsletter_directory, render_upload_section
+from ui.tabs import render_newsletter_directory
+from ui.actions import render_contact_export_tab
 
 # Initialize config and page
 config = Config()
@@ -56,8 +57,7 @@ def main() -> None:
         st.info("Content Analysis feature coming soon!")
     
     with tab4:
-        st.info("Contact Export feature coming soon!")
-        render_upload_section(data_manager)
+        render_contact_export_tab(df)
 
 
 if __name__ == "__main__":

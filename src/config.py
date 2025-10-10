@@ -17,8 +17,8 @@ class Config:
         PAGE_TITLE: Application page title
         CACHE_TTL: Cache time-to-live in seconds
     """
-    DB_FILE: str = "output/substack.db"
-    CSV_FILE: str = "output/substack_posts.csv"
+    DB_FILE: str = "../output/substack.db"
+    CSV_FILE: str = "../output/substack_posts.csv"
     DEFAULT_DAYS: int = 90
     MIN_ROWS: int = 10
     MAX_ROWS: int = 2000
