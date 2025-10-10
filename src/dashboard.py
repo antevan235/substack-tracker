@@ -105,6 +105,139 @@ class Dashboard:
         self.data_manager = DataManager()
         self.df = self.data_manager.load_data()
 
+    def extract_email(self, author_string: str) -> str:
+        """Extract email from author field"""
+        if not isinstance(author_string, str):
+            return None
+        match = re.search(r'<([^>]+@[^>]+)>', author_string)
+        return match.group(1) if match else None
+
+    def calculate_posting_patterns(self, df: pd.DataFrame) -> dict:
+        """Calculate posting patterns for each newsletter"""
+        patterns = {}
+        for newsletter in df['newsletter'].unique():
+            newsletter_df = df[df['newsletter'] == newsletter].copy()
+            newsletter_df['published_dt'] = pd.to_datetime(newsletter_df['published_dt'])
+            newsletter_df['day_of_week'] = newsletter_df['published_dt'].dt.day_name()
+            
+            # Day of week distribution
+            day_counts = newsletter_df['day_of_week'].value_counts()
+            top_days = day_counts.head(2).index.tolist() if len(day_counts) > 0 else []
+            
+            # Frequency trend (last 30 days vs 30-60 days ago)
+            now = pd.Timestamp.now(tz='UTC')
+            last_30 = newsletter_df[newsletter_df['published_dt'] >= now - pd.Timedelta(days=30)]
+            prev_30 = newsletter_df[(newsletter_df['published_dt'] >= now - pd.Timedelta(days=60)) & 
+                                    (newsletter_df['published_dt'] < now - pd.Timedelta(days=30))]
+            
+            trend = len(last_30) - len(prev_30)
+            trend_pct = ((len(last_30) - len(prev_30)) / len(prev_30) * 100) if len(prev_30) > 0 else 0
+            
+            # Consistency score
+            if len(newsletter_df) > 1:
+                newsletter_df = newsletter_df.sort_values('published_dt')
+                days_between = newsletter_df['published_dt'].diff().dt.days.dropna()
+                consistency = days_between.std() if len(days_between) > 0 else 0
+                consistency_label = "🟢 Consistent" if consistency < 3 else "🟡 Moderate" if consistency < 7 else "🔴 Sporadic"
+            else:
+                consistency_label = "⚪ Insufficient data"
+            
+            patterns[newsletter] = {
+                'top_days': top_days,
+                'trend': trend,
+                'trend_pct': trend_pct,
+                'consistency': consistency_label,
+                'recent_count': len(last_30)
+            }
+        
+        return patterns
+
+    def get_hot_authors(self, df: pd.DataFrame) -> list:
+        """Find authors with 3+ posts in last 30 days"""
+        now = pd.Timestamp.now(tz='UTC')
+        df = df.copy()
+        df['published_dt'] = pd.to_datetime(df['published_dt'])
+        recent = df[df['published_dt'] >= now - pd.Timedelta(days=30)]
+        
+        author_counts = recent.groupby('author').size().reset_index(name='post_count')
+        hot = author_counts[author_counts['post_count'] >= 3].sort_values('post_count', ascending=False).head(5)
+        
+        result = []
+        for _, row in hot.iterrows():
+            author_df = df[df['author'] == row['author']]
+            email = self.extract_email(author_df['author'].iloc[0]) if len(author_df) > 0 else None
+            result.append({
+                'author': row['author'],
+                'count': row['post_count'],
+                'email': email
+            })
+        return result
+
+    def get_going_cold(self, df: pd.DataFrame) -> list:
+        """Find newsletters that haven't posted in 14+ days"""
+        now = pd.Timestamp.now(tz='UTC')
+        df = df.copy()
+        df['published_dt'] = pd.to_datetime(df['published_dt'])
+        
+        result = []
+        for newsletter in df['newsletter'].unique():
+            newsletter_df = df[df['newsletter'] == newsletter]
+            last_post = newsletter_df['published_dt'].max()
+            days_since = (now - last_post).days
+            
+            if days_since >= 14:
+                result.append({
+                    'newsletter': newsletter,
+                    'days_since': days_since
+                })
+        
+        return sorted(result, key=lambda x: x['days_since'], reverse=True)[:5]
+
+    def get_new_voices(self, df: pd.DataFrame) -> list:
+        """Find authors who started posting in last 60 days"""
+        now = pd.Timestamp.now(tz='UTC')
+        df = df.copy()
+        df['published_dt'] = pd.to_datetime(df['published_dt'])
+        
+        result = []
+        for author in df['author'].unique():
+            author_df = df[df['author'] == author].sort_values('published_dt')
+            first_post = author_df['published_dt'].min()
+            days_since_first = (now - first_post).days
+            
+            if days_since_first <= 60:
+                result.append({
+                    'author': author,
+                    'days_ago': days_since_first,
+                    'newsletter': author_df['newsletter'].iloc[0] if len(author_df) > 0 else 'N/A'
+                })
+        
+        return sorted(result, key=lambda x: x['days_ago'])[:5]
+
+    def get_rising_stars(self, df: pd.DataFrame) -> list:
+        """Find authors increasing posting frequency by 50%+"""
+        now = pd.Timestamp.now(tz='UTC')
+        df = df.copy()
+        df['published_dt'] = pd.to_datetime(df['published_dt'])
+        
+        result = []
+        for author in df['author'].unique():
+            author_df = df[df['author'] == author]
+            last_30 = author_df[author_df['published_dt'] >= now - pd.Timedelta(days=30)]
+            prev_30 = author_df[(author_df['published_dt'] >= now - pd.Timedelta(days=60)) & 
+                                (author_df['published_dt'] < now - pd.Timedelta(days=30))]
+            
+            if len(prev_30) > 0:
+                increase_pct = ((len(last_30) - len(prev_30)) / len(prev_30)) * 100
+                if increase_pct >= 50:
+                    result.append({
+                        'author': author,
+                        'increase_pct': increase_pct,
+                        'recent_count': len(last_30)
+                    })
+        
+        return sorted(result, key=lambda x: x['increase_pct'], reverse=True)[:5]
+
     def render_sidebar(self) -> tuple:
         """Render sidebar filters"""
         st.sidebar.header("Filters & Controls")
@@ -224,7 +357,64 @@ class Dashboard:
         
         st.markdown("---")
         
-        # Newsletter cards
+        # Actionable Insight Cards
+        st.markdown("## 🎯 Actionable Insights")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            with st.container(border=True):
+                st.markdown("### 🔥 Hot Authors")
+                st.markdown("_Best time to reach out - they're actively publishing!_")
+                hot = self.get_hot_authors(self.df)
+                if hot:
+                    for author in hot:
+                        st.markdown(f"**{author['author'][:40]}** - {author['count']} posts")
+                        if author['email']:
+                            st.markdown(f"📧 {author['email']}")
+                else:
+                    st.info("No highly active authors in last 30 days")
+        
+        with col2:
+            with st.container(border=True):
+                st.markdown("### 💤 Going Cold")
+                st.markdown("_Potential opportunities - they might need content!_")
+                cold = self.get_going_cold(self.df)
+                if cold:
+                    for newsletter in cold:
+                        st.markdown(f"**{newsletter['newsletter'][:40]}** - {newsletter['days_since']} days ago")
+                else:
+                    st.success("All newsletters are active!")
+        
+        col3, col4 = st.columns(2)
+        
+        with col3:
+            with st.container(border=True):
+                st.markdown("### 🆕 New Voices")
+                st.markdown("_Fresh perspectives - early relationship building opportunity!_")
+                new = self.get_new_voices(self.df)
+                if new:
+                    for voice in new:
+                        st.markdown(f"**{voice['author'][:40]}** ({voice['newsletter'][:30]}) - {voice['days_ago']} days ago")
+                else:
+                    st.info("No new authors in last 60 days")
+        
+        with col4:
+            with st.container(border=True):
+                st.markdown("### 📈 Rising Stars")
+                st.markdown("_Growing momentum - catch them while they're active!_")
+                rising = self.get_rising_stars(self.df)
+                if rising:
+                    for star in rising:
+                        st.markdown(f"**{star['author'][:40]}** - +{star['increase_pct']:.0f}%")
+                else:
+                    st.info("No authors with significant growth")
+        
+        st.markdown("---")
+        
+        # Newsletter cards with posting patterns
+        st.markdown("## 📊 Newsletter Details")
+        patterns = self.calculate_posting_patterns(self.df)
         newsletters = sorted(self.df["newsletter"].dropna().unique())
         
         for newsletter in newsletters:
@@ -251,8 +441,12 @@ class Dashboard:
             else:
                 posts_per_month = 0
             
-            # Create expander for each newsletter
-            with st.expander(f"📬 **{newsletter}**"):
+            # Get posting patterns for this newsletter
+            pattern = patterns.get(newsletter, {})
+            consistency_label = pattern.get('consistency', '⚪ Unknown')
+            
+            # Create expander for each newsletter with pattern info
+            with st.expander(f"📬 **{newsletter}** | {total_posts} posts | {consistency_label}"):
                 # Newsletter stats
                 col1, col2, col3, col4 = st.columns(4)
                 with col1:
@@ -263,6 +457,27 @@ class Dashboard:
                     st.metric("📅 Most Recent", recent_date_str)
                 with col4:
                     st.metric("🔄 Posts/Month", f"{posts_per_month:.1f}")
+                
+                # Show posting patterns
+                if pattern:
+                    st.markdown("---")
+                    st.markdown("### 📊 Posting Patterns")
+                    
+                    col_a, col_b = st.columns(2)
+                    with col_a:
+                        if pattern.get('top_days'):
+                            st.markdown(f"**📅 Typically posts on:** {', '.join(pattern.get('top_days', ['Unknown']))}")
+                        else:
+                            st.markdown(f"**📅 Typically posts on:** Insufficient data")
+                    
+                    with col_b:
+                        trend_pct = pattern.get('trend_pct', 0)
+                        if trend_pct > 20:
+                            st.markdown(f"**📈 Trend:** Posting {trend_pct:.0f}% more than before")
+                        elif trend_pct < -20:
+                            st.markdown(f"**📉 Trend:** Posting {abs(trend_pct):.0f}% less than before")
+                        else:
+                            st.markdown(f"**➡️ Trend:** Stable posting frequency")
                 
                 st.markdown("---")
                 st.subheader("Authors")
