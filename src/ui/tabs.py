@@ -11,9 +11,12 @@ from analytics.insights import (
     get_going_cold,
     get_new_voices,
     get_rising_stars,
-    calculate_posting_patterns
+    calculate_posting_patterns,
+    extract_email
 )
+from analytics.contacts import validate_twitter_handle
 from data.loader import DataManager
+from ui.actions import render_action_buttons
 
 
 def render_newsletter_directory(df: pd.DataFrame) -> None:
@@ -101,6 +104,31 @@ def _render_insight_cards(df: pd.DataFrame) -> None:
                     )
                     if author['email']:
                         st.markdown(f"📧 {author['email']}")
+                        
+                        # Get additional info for action buttons
+                        author_df = df[df['author'] == author['author']]
+                        last_post = author_df['published_dt'].max()
+                        last_post_str = (
+                            last_post.strftime('%Y-%m-%d') 
+                            if pd.notna(last_post) else ''
+                        )
+                        newsletter = (
+                            author_df['newsletter'].iloc[0] 
+                            if len(author_df) > 0 else ''
+                        )
+                        twitter = validate_twitter_handle(author['author'])
+                        
+                        # Render action buttons
+                        render_action_buttons(
+                            author_name=author['author'],
+                            email=author['email'],
+                            newsletter=newsletter,
+                            category='Hot Author',
+                            posts=author['count'],
+                            last_post=last_post_str,
+                            twitter=twitter
+                        )
+                        st.markdown("")
             else:
                 st.info("No highly active authors in last 30 days")
     
@@ -112,11 +140,39 @@ def _render_insight_cards(df: pd.DataFrame) -> None:
             )
             cold = get_going_cold(df)
             if cold:
-                for newsletter in cold:
+                for newsletter_data in cold:
                     st.markdown(
-                        f"**{newsletter['newsletter'][:40]}** - "
-                        f"{newsletter['days_since']} days ago"
+                        f"**{newsletter_data['newsletter'][:40]}** - "
+                        f"{newsletter_data['days_since']} days ago"
                     )
+                    
+                    # Get first author with email from this newsletter
+                    newsletter_df = df[df['newsletter'] == newsletter_data['newsletter']]
+                    for author in newsletter_df['author'].dropna().unique():
+                        email = extract_email(author)
+                        if email:
+                            st.markdown(f"📧 {email}")
+                            
+                            author_df = newsletter_df[newsletter_df['author'] == author]
+                            last_post = author_df['published_dt'].max()
+                            last_post_str = (
+                                last_post.strftime('%Y-%m-%d') 
+                                if pd.notna(last_post) else ''
+                            )
+                            twitter = validate_twitter_handle(author)
+                            
+                            # Render action buttons
+                            render_action_buttons(
+                                author_name=author,
+                                email=email,
+                                newsletter=newsletter_data['newsletter'],
+                                category='Going Cold',
+                                posts=len(author_df),
+                                last_post=last_post_str,
+                                twitter=twitter
+                            )
+                            st.markdown("")
+                            break  # Only show first author with email
             else:
                 st.success("All newsletters are active!")
     
@@ -136,6 +192,31 @@ def _render_insight_cards(df: pd.DataFrame) -> None:
                         f"({voice['newsletter'][:30]}) - "
                         f"{voice['days_ago']} days ago"
                     )
+                    
+                    # Get email and other info for action buttons
+                    email = extract_email(voice['author'])
+                    if email:
+                        st.markdown(f"📧 {email}")
+                        
+                        author_df = df[df['author'] == voice['author']]
+                        last_post = author_df['published_dt'].max()
+                        last_post_str = (
+                            last_post.strftime('%Y-%m-%d') 
+                            if pd.notna(last_post) else ''
+                        )
+                        twitter = validate_twitter_handle(voice['author'])
+                        
+                        # Render action buttons
+                        render_action_buttons(
+                            author_name=voice['author'],
+                            email=email,
+                            newsletter=voice['newsletter'],
+                            category='New Voice',
+                            posts=len(author_df),
+                            last_post=last_post_str,
+                            twitter=twitter
+                        )
+                        st.markdown("")
             else:
                 st.info("No new authors in last 60 days")
     
@@ -152,6 +233,35 @@ def _render_insight_cards(df: pd.DataFrame) -> None:
                         f"**{star['author'][:40]}** - "
                         f"+{star['increase_pct']:.0f}%"
                     )
+                    
+                    # Get email and other info for action buttons
+                    email = extract_email(star['author'])
+                    if email:
+                        st.markdown(f"📧 {email}")
+                        
+                        author_df = df[df['author'] == star['author']]
+                        last_post = author_df['published_dt'].max()
+                        last_post_str = (
+                            last_post.strftime('%Y-%m-%d') 
+                            if pd.notna(last_post) else ''
+                        )
+                        newsletter = (
+                            author_df['newsletter'].iloc[0] 
+                            if len(author_df) > 0 else ''
+                        )
+                        twitter = validate_twitter_handle(star['author'])
+                        
+                        # Render action buttons
+                        render_action_buttons(
+                            author_name=star['author'],
+                            email=email,
+                            newsletter=newsletter,
+                            category='Rising Star',
+                            posts=star['recent_count'],
+                            last_post=last_post_str,
+                            twitter=twitter
+                        )
+                        st.markdown("")
             else:
                 st.info("No authors with significant growth")
 
