@@ -29,6 +29,10 @@ def main() -> None:
     3. Displaying top-level metrics
     4. Creating tabbed interface with various views
     """
+    # Initialize tab state if not exists
+    if 'active_tab' not in st.session_state:
+        st.session_state.active_tab = 0
+    
     # Initialize data manager and load data
     data_manager = DataManager()
     df = data_manager.load_data()

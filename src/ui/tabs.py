@@ -388,7 +388,7 @@ def _render_newsletter_authors(newsletter_df: pd.DataFrame) -> None:
             if email_match:
                 email = email_match.group(1)
             
-            # Try to extract Twitter handle
+            # Try to extract X/Twitter handle
             twitter_match = re.search(r'@(\w+)', author)
             if twitter_match:
                 twitter = f"@{twitter_match.group(1)}"
@@ -401,7 +401,7 @@ def _render_newsletter_authors(newsletter_df: pd.DataFrame) -> None:
         if email:
             st.markdown(f"- 📧 Email: {email}")
         if twitter:
-            st.markdown(f"- 🐦 Twitter: {twitter}")
+            st.markdown(f"- 🐦 X: {twitter}")
         
         st.markdown("")
 
