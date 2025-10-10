@@ -88,12 +88,16 @@ class Database:
                 datetime.now(timezone.utc).isoformat()
             ) for post in posts]
 
-            return conn.executemany('''
+            cursor = conn.executemany('''
                 INSERT OR IGNORE INTO posts (
                     newsletter, title, url, author, published,
                     summary, tags, word_count, image_url, fetched_at
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ''', values).rowcount
+            ''', values)
+            
+            conn.commit()
+            
+            return cursor.rowcount
 
     def get_titles(self, newsletter: str) -> List[str]:
         """Get existing titles for duplicate checking"""
