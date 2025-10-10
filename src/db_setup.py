@@ -1,7 +1,7 @@
 from pathlib import Path
 import sqlite3
 from contextlib import contextmanager
-from typing import Optional
+from typing import Optional, Generator
 import logging
 from datetime import datetime
 import sys
@@ -41,7 +41,7 @@ class DatabaseManager:
         """
 
     @contextmanager
-    def connect(self) -> sqlite3.Connection:
+    def connect(self) -> Generator[sqlite3.Connection, None, None]:
         """Create database connection with context management"""
         conn = None
         try:
