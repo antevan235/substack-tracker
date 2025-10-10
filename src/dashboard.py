@@ -7,6 +7,7 @@ from typing import Optional, List
 import pytz
 from dataclasses import dataclass
 from contextlib import contextmanager
+import re
 
 # Configuration
 @dataclass
@@ -181,6 +182,129 @@ class Dashboard:
             with col:
                 st.metric(label, value)
 
+    def render_newsletter_directory(self):
+        """Render Newsletter Directory tab"""
+        st.header("📬 Newsletter Directory")
+        st.markdown("Browse newsletters organized by publication → authors → contact info")
+        
+        # Top-level stats
+        cols = st.columns(4)
+        
+        # Total newsletters
+        with cols[0]:
+            st.metric("Total Newsletters", self.df["newsletter"].nunique())
+        
+        # Total unique authors
+        with cols[1]:
+            st.metric("Unique Authors", self.df["author"].dropna().nunique())
+        
+        # Most active newsletter (by post count)
+        with cols[2]:
+            if len(self.df) > 0:
+                most_active = self.df["newsletter"].value_counts().iloc[0]
+                most_active_name = self.df["newsletter"].value_counts().index[0]
+                st.metric("Most Active Newsletter", f"{most_active_name[:20]}...", 
+                         delta=f"{most_active} posts")
+            else:
+                st.metric("Most Active Newsletter", "N/A")
+        
+        # Most prolific author (by post count)
+        with cols[3]:
+            if len(self.df) > 0:
+                author_counts = self.df[self.df["author"].notna()]["author"].value_counts()
+                if len(author_counts) > 0:
+                    most_prolific = author_counts.iloc[0]
+                    most_prolific_name = author_counts.index[0]
+                    st.metric("Most Prolific Author", f"{most_prolific_name[:20]}...", 
+                             delta=f"{most_prolific} posts")
+                else:
+                    st.metric("Most Prolific Author", "N/A")
+            else:
+                st.metric("Most Prolific Author", "N/A")
+        
+        st.markdown("---")
+        
+        # Newsletter cards
+        newsletters = sorted(self.df["newsletter"].dropna().unique())
+        
+        for newsletter in newsletters:
+            # Get newsletter data
+            newsletter_df = self.df[self.df["newsletter"] == newsletter]
+            total_posts = len(newsletter_df)
+            unique_authors = newsletter_df["author"].dropna().nunique()
+            
+            # Most recent post date
+            recent_date = newsletter_df["published_dt"].max()
+            recent_date_str = recent_date.strftime("%Y-%m-%d") if pd.notna(recent_date) else "N/A"
+            
+            # Posting frequency (posts per month)
+            if pd.notna(recent_date):
+                min_date = newsletter_df["published_dt"].min()
+                if pd.notna(min_date):
+                    days_diff = (recent_date - min_date).days
+                    if days_diff > 0:
+                        posts_per_month = (total_posts / days_diff) * 30
+                    else:
+                        posts_per_month = 0
+                else:
+                    posts_per_month = 0
+            else:
+                posts_per_month = 0
+            
+            # Create expander for each newsletter
+            with st.expander(f"📬 **{newsletter}**"):
+                # Newsletter stats
+                col1, col2, col3, col4 = st.columns(4)
+                with col1:
+                    st.metric("📊 Total Posts", total_posts)
+                with col2:
+                    st.metric("👥 Unique Authors", unique_authors)
+                with col3:
+                    st.metric("📅 Most Recent", recent_date_str)
+                with col4:
+                    st.metric("🔄 Posts/Month", f"{posts_per_month:.1f}")
+                
+                st.markdown("---")
+                st.subheader("Authors")
+                
+                # Author details
+                authors = newsletter_df["author"].dropna().unique()
+                
+                for author in sorted(authors):
+                    author_posts = newsletter_df[newsletter_df["author"] == author]
+                    author_post_count = len(author_posts)
+                    
+                    # Most recent post
+                    most_recent = author_posts.iloc[0]
+                    recent_title = most_recent["title"]
+                    recent_url = most_recent["url"]
+                    
+                    # Extract contact info from author field
+                    email = ""
+                    twitter = ""
+                    if isinstance(author, str):
+                        # Try to extract email (pattern: text <email@domain.com>)
+                        email_match = re.search(r'<([^>]+@[^>]+)>', author)
+                        if email_match:
+                            email = email_match.group(1)
+                        
+                        # Try to extract Twitter handle
+                        twitter_match = re.search(r'@(\w+)', author)
+                        if twitter_match:
+                            twitter = f"@{twitter_match.group(1)}"
+                    
+                    # Display author info
+                    st.markdown(f"**{author}**")
+                    st.markdown(f"- 📝 Posts: {author_post_count}")
+                    st.markdown(f"- 🔗 Latest: [{recent_title}]({recent_url})")
+                    
+                    if email:
+                        st.markdown(f"- 📧 Email: {email}")
+                    if twitter:
+                        st.markdown(f"- 🐦 Twitter: {twitter}")
+                    
+                    st.markdown("")
+
     def render_upload_section(self):
         """Render CSV upload section"""
         st.markdown("---")
@@ -207,7 +331,27 @@ def main():
     dashboard = Dashboard()
     dates, filters = dashboard.render_sidebar()
     dashboard.render_metrics()
-    dashboard.render_upload_section()
+    
+    # Create tabbed interface
+    tab1, tab2, tab3, tab4 = st.tabs([
+        "📬 Newsletter Directory",
+        "👤 Author Profiles (Coming Soon)",
+        "📊 Content Analysis (Coming Soon)",
+        "📤 Contact Export (Coming Soon)"
+    ])
+    
+    with tab1:
+        dashboard.render_newsletter_directory()
+    
+    with tab2:
+        st.info("Author Profiles feature coming soon!")
+    
+    with tab3:
+        st.info("Content Analysis feature coming soon!")
+    
+    with tab4:
+        st.info("Contact Export feature coming soon!")
+        dashboard.render_upload_section()
 
 if __name__ == "__main__":
     main()
