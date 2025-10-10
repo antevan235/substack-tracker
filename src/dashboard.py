@@ -113,20 +113,24 @@ class Dashboard:
             self.df = self.data_manager.load_data()
             st.rerun()
 
-        
-        # Date filters - handle NaT values
-        max_date_raw = self.df["published_dt"].max()
-        if pd.isna(max_date_raw):
+        # Date filters - handle NaT values with fallback
+        try:
+            max_date_raw = self.df["published_dt"].max()
+            if pd.isna(max_date_raw):
+                max_date = datetime.now(pytz.UTC)
+                default_start = (max_date - timedelta(days=config.DEFAULT_DAYS)).date()
+            else:
+                max_date = max_date_raw
+                default_start = (max_date - timedelta(days=config.DEFAULT_DAYS)).date()
+        except Exception as e:
+            st.sidebar.warning(f"Date filter error: {e}")
             max_date = datetime.now(pytz.UTC)
             default_start = (max_date - timedelta(days=config.DEFAULT_DAYS)).date()
-        else:
-            max_date = max_date_raw
-            default_start = (max_date - timedelta(days=config.DEFAULT_DAYS)).date()
 
-            dates = (
-                st.sidebar.date_input("Start date", value=default_start),
-                st.sidebar.date_input("End date", value=max_date.date())
-            )
+        dates = (
+            st.sidebar.date_input("Start date", value=default_start),
+            st.sidebar.date_input("End date", value=max_date.date())
+        )
 
         # Newsletter and author filters
         newsletters = sorted(self.df["newsletter"].dropna().unique())
@@ -136,7 +140,7 @@ class Dashboard:
             'newsletters': st.sidebar.multiselect(
                 "Newsletters", 
                 options=newsletters, 
-                default=newsletters[:6] or newsletters
+                default=newsletters[:6] if len(newsletters) > 6 else newsletters
             ),
             'authors': st.sidebar.multiselect(
                 "Authors", 
