@@ -113,13 +113,20 @@ class Dashboard:
             self.df = self.data_manager.load_data()
             st.rerun()
 
-        # Date filters
-        max_date = self.df["published_dt"].max() or datetime.now(pytz.UTC)
-        default_start = (max_date - timedelta(days=config.DEFAULT_DAYS)).date()
-        dates = (
-            st.sidebar.date_input("Start date", value=default_start),
-            st.sidebar.date_input("End date", value=max_date.date())
-        )
+        
+        # Date filters - handle NaT values
+        max_date_raw = self.df["published_dt"].max()
+        if pd.isna(max_date_raw):
+            max_date = datetime.now(pytz.UTC)
+            default_start = (max_date - timedelta(days=config.DEFAULT_DAYS)).date()
+        else:
+            max_date = max_date_raw
+            default_start = (max_date - timedelta(days=config.DEFAULT_DAYS)).date()
+
+            dates = (
+                st.sidebar.date_input("Start date", value=default_start),
+                st.sidebar.date_input("End date", value=max_date.date())
+            )
 
         # Newsletter and author filters
         newsletters = sorted(self.df["newsletter"].dropna().unique())
