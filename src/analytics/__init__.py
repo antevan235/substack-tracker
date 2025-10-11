@@ -14,6 +14,10 @@ from .contacts import (
     extract_contacts,
     deduplicate_contacts
 )
+from .clustering import (
+    StudentClusteringAnalyzer,
+    generate_analysis_report
+)
 
 __all__ = [
     'extract_email',
@@ -25,5 +29,7 @@ __all__ = [
     'validate_email',
     'validate_twitter_handle',
     'extract_contacts',
-    'deduplicate_contacts'
+    'deduplicate_contacts',
+    'StudentClusteringAnalyzer',
+    'generate_analysis_report'
 ]

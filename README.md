@@ -11,6 +11,7 @@ A Python application for tracking and analyzing Substack newsletters with an int
 - 🔍 Full-text search
 - 📅 Date range filtering
 - 📤 CSV export functionality
+- 🎯 K-Means clustering analysis for student data
 
 ## Project Structure
 
@@ -59,12 +60,27 @@ The dashboard will open at `http://localhost:8501`
 - **`src/fetch_with_content.py`** - Fetch posts with full content
 - **`src/export_to_csv.py`** - Export database to CSV
 - **`src/dashboard.py`** - Launch the Streamlit dashboard
+- **`src/student_clustering_analysis.py`** - Run k-Means clustering on student data
 
 ## Data Storage
 
 - **Input**: `data/newsletters.txt` - List of newsletter URLs
 - **Output**: `output/substack.db` - SQLite database
 - **Output**: `output/substack_posts.csv` - CSV exports
+
+## K-Means Clustering Analysis
+
+This project includes a comprehensive student data clustering analysis module:
+
+```bash
+python src/student_clustering_analysis.py
+```
+
+See [CLUSTERING_ANALYSIS.md](CLUSTERING_ANALYSIS.md) for detailed documentation on:
+- Running k-Means clustering with 4 clusters
+- Analyzing student behavioral patterns and risk factors
+- Interpreting cluster results and centroids
+- Using the clustering API programmatically
 
 ## Development
 

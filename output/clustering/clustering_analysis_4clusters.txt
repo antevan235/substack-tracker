@@ -1,0 +1,78 @@
+======================================================================
+K-MEANS CLUSTERING ANALYSIS REPORT
+======================================================================
+
+1. CLUSTER SIZES
+----------------------------------------------------------------------
+   Cluster 0: 310 students
+   Cluster 1: 311 students
+   Cluster 2: 287 students
+   Cluster 3: 92 students
+
+   Largest Cluster Size: 311 students
+
+2. STUDENT ID 938 CLUSTER ASSIGNMENT
+----------------------------------------------------------------------
+   Student ID 938 belongs to Cluster 2
+
+3. CRITICAL RISK CLUSTER (Highest Arrest Rate)
+----------------------------------------------------------------------
+   Cluster 3 - Average Arrests: 3.52
+   LABEL: Critical Risk
+
+4. GENDER DISTRIBUTION IN CLUSTER 0
+----------------------------------------------------------------------
+   Females (0): 0
+   Males (1): 310
+   More: Males
+
+5. SUSPENSION PROPORTION IN CLUSTER 3
+----------------------------------------------------------------------
+   Proportion Suspended: 100.00% (1.0000)
+
+6. EXPULSIONS IN CLUSTER 0
+----------------------------------------------------------------------
+   Has Expulsions: False
+   Count: 0
+
+7. AVERAGE ARRESTS IN CLUSTER 2
+----------------------------------------------------------------------
+   Average Arrests: 2.29
+
+8. MIDDLE-RISK CLUSTER CLASSIFICATION
+----------------------------------------------------------------------
+   Middle-Risk Clusters: []
+   Total Students in Middle-Risk Clusters: 0
+
+9. GRADE ATTRIBUTE INTERPRETATION
+----------------------------------------------------------------------
+Grade Risk Interpretation:
+        
+High-Risk Cluster (Cluster 3):
+  - Average Grade: 9.20
+  - Average Arrests: 3.52
+  
+Low-Risk Cluster (Cluster 1):
+  - Average Grade: 10.66
+  - Average Arrests: 0.20
+  
+Pattern: Higher grades associated with lower risk
+
+
+10. COMPREHENSIVE CLUSTER SUMMARY
+----------------------------------------------------------------------
+ Cluster  Size  Avg_Arrests  Avg_Grade  Pct_Suspended  Pct_Expelled  Pct_Female   Pct_Male
+       0   310     0.229032  10.629032       2.903226           0.0    0.000000 100.000000
+       1   311     0.199357  10.659164       6.752412           0.0  100.000000   0.000000
+       2   287     2.285714   9.383275     100.000000           0.0   32.055749  67.944251
+       3    92     3.521739   9.195652     100.000000         100.0   30.434783  69.565217
+
+11. CLUSTER CENTROIDS
+----------------------------------------------------------------------
+ Cluster        Gender     Grade  Arrests  Suspended      Expelled
+       0  1.000000e+00 10.629032 0.229032   0.029032 -2.636780e-16
+       1 -1.776357e-15 10.659164 0.199357   0.067524 -2.636780e-16
+       2  6.794425e-01  9.383275 2.285714   1.000000 -1.804112e-16
+       3  6.956522e-01  9.195652 3.521739   1.000000  1.000000e+00
+
+======================================================================
