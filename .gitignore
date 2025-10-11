@@ -2,6 +2,7 @@
 output/substack.db
 output/*.csv
 output/*.json
+output/clustering/
 
 # Python
 __pycache__/
