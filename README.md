@@ -1,74 +1,56 @@
 # Substack Tracker
 
-A Python application for tracking and analyzing Substack newsletters with an interactive Streamlit dashboard.
+This is a simple Streamlit app I built to track and organize Substack newsletters (and other RSS feeds) without digging through endless tabs or emails.
 
-## Features
+It fetches posts automatically, stores them in a small database, and gives you a clean dashboard to search, filter, and export resultsm, all directly in your browser.
 
-- 📊 Interactive Streamlit dashboard
-- 🔄 Automated RSS feed fetching
-- 💾 SQLite database storage
-- 📈 Analytics and metrics
-- 🔍 Full-text search
-- 📅 Date range filtering
-- 📤 CSV export functionality
+---
 
-## Project Structure
+## 🚀 How to Use (No Local Setup Needed)
 
-```
-substack-tracker/
-├── src/              # Source code
-├── data/             # Input data (newsletters list)
-└── output/           # Generated files (database, exports)
-```
+You can run the app directly online here:  
+👉 **[Streamlit App Link] [(https://your-streamlit-url-here.streamlit.app](https://substack-tracker-s8apev8vkp8usqxnof6hmm.streamlit.app/))**
 
-## Quick Start
+Once it loads, it will automatically:
+- Fetch and store posts from the feeds listed in `data/newsletters.txt`
+- Display them in a searchable, filterable Streamlit dashboard
+- Let you export results as a CSV
 
-### 1. Install Dependencies
+If you ever want to **update which newsletters it tracks**, just:
+
+1. Open the file:  
+   `data/newsletters.txt`
+2. Add or remove any feed URLs (one per line)
+3. Refresh the app — it’ll automatically reload with the new data
+
+Example entries in `data/newsletters.txt`:
+
+---
+
+## 🧩 What It Does
+- Pulls posts from Substack + RSS feeds
+- Stores them in an internal SQLite database
+- Lets you search, filter, and export content
+- Runs fully in the browser — no installs or scripts needed
+
+---
+
+## 📂 Repo Layout
+
+---
+
+## 🛠️ Developer Notes (Optional)
+If you want to run it locally:
 ```bash
+git clone https://github.com/antevan235/substack-tracker.git
+cd substack-tracker
 pip install -r requirements.txt
-```
-
-### 2. Configure Newsletters
-Add newsletter URLs to `data/newsletters.txt` (one per line):
-```
-https://example.substack.com
-https://another.substack.com
-```
-
-### 3. Initialize Database
-```bash
-python src/db_setup.py
-```
-
-### 4. Fetch Newsletter Data
-```bash
-python src/fetch_to_db.py
-```
-
-### 5. Launch Dashboard
-```bash
 streamlit run src/dashboard.py
+
 ```
-
-The dashboard will open at `http://localhost:8501`
-
-## Scripts
-
-- **`src/db_setup.py`** - Initialize the database schema
-- **`src/fetch_to_db.py`** - Fetch posts from RSS feeds to database
-- **`src/fetch_with_content.py`** - Fetch posts with full content
-- **`src/export_to_csv.py`** - Export database to CSV
-- **`src/dashboard.py`** - Launch the Streamlit dashboard
-
-## Data Storage
-
-- **Input**: `data/newsletters.txt` - List of newsletter URLs
-- **Output**: `output/substack.db` - SQLite database
-- **Output**: `output/substack_posts.csv` - CSV exports
-
-## Development
-
-This project follows Python best practices with organized directory structure:
-- All source code in `src/`
-- Configuration data in `data/`
-- Generated files in `output/` (gitignored)
+---
+## ✅ What’s Improved
+- Focused entirely on the *Streamlit Cloud workflow*
+- Highlighted `data/newsletters.txt` as the **main interaction point**
+- Simplified steps for non-technical users.
+- Still includes optional developer setup for future contributors
