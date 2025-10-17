@@ -30,7 +30,7 @@ Example entries in `data/newsletters.txt`:
 ## 🧩 What It Does
 - Pulls posts from Substack + RSS feeds
 - Stores them in an internal SQLite database
-- Lets you search, filter, and export content
+- Lets you search,and filter content
 - Runs fully in the browser — no installs or scripts needed
 
 ---
